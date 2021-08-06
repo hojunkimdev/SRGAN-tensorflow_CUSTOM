@@ -14,8 +14,8 @@ import numpy as np
 Flags = tf.app.flags
 
 # The system parameter
-Flags.DEFINE_string('output_dir', None, 'The output directory of the checkpoint')
-Flags.DEFINE_string('summary_dir', None, 'The dirctory to output the summary')
+Flags.DEFINE_string('output_dir', './experiment_SRGAN_VGG54/', 'The output directory of the checkpoint')
+Flags.DEFINE_string('summary_dir', './experiment_SRGAN_VGG54/log/', 'The dirctory to output the summary')
 Flags.DEFINE_string('mode', 'train', 'The mode of the model train, test.')
 Flags.DEFINE_string('checkpoint', None, 'If provided, the weight will be restored from the provided checkpoint')
 Flags.DEFINE_boolean('pre_trained_model', False, 'If set True, the weight will be loaded but the global_step will still '
@@ -27,8 +27,8 @@ Flags.DEFINE_string('vgg_ckpt', './vgg19/vgg_19.ckpt', 'path to checkpoint file 
 Flags.DEFINE_string('task', None, 'The task: SRGAN, SRResnet')
 # The data preparing operation
 Flags.DEFINE_integer('batch_size', 16, 'Batch size of the input batch')
-Flags.DEFINE_string('input_dir_LR', None, 'The directory of the input resolution input data')
-Flags.DEFINE_string('input_dir_HR', None, 'The directory of the high resolution input data')
+Flags.DEFINE_string('input_dir_LR', '/home/dl2/Desktop/workspace/khj/SDC/SRGAN-tensorflow-master/data/train/SH_trainSet/Review_120_fns_LR', 'The directory of the input resolution input data')
+Flags.DEFINE_string('input_dir_HR', '/home/dl2/Desktop/workspace/khj/SDC/SRGAN-tensorflow-master/data/train/SH_trainSet/Review_480_gray_HR', 'The directory of the high resolution input data')
 Flags.DEFINE_boolean('flip', True, 'Whether random flip data augmentation is applied')
 Flags.DEFINE_boolean('random_crop', True, 'Whether perform the random crop')
 Flags.DEFINE_integer('crop_size', 24, 'The crop size of the training image')
@@ -309,6 +309,7 @@ elif FLAGS.mode == 'train':
     # Use superviser to coordinate all queue and summary writer
     sv = tf.train.Supervisor(logdir=FLAGS.summary_dir, save_summaries_secs=0, saver=None)
     with sv.managed_session(config=config) as sess:
+        print('config checkpoint.{}'.format(FLAGS.checkpoint))
         if (FLAGS.checkpoint is not None) and (FLAGS.pre_trained_model is False):
             print('Loading model from the checkpoint...')
             checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint)
@@ -316,6 +317,7 @@ elif FLAGS.mode == 'train':
 
         elif (FLAGS.checkpoint is not None) and (FLAGS.pre_trained_model is True):
             print('Loading weights from the pre-trained model')
+            print('Succese Restore.{}'.format(FLAGS.checkpoint))
             weight_initiallizer.restore(sess, FLAGS.checkpoint)
 
         if not FLAGS.perceptual_mode == 'MSE':
@@ -333,6 +335,10 @@ elif FLAGS.mode == 'train':
 
         print('Optimization starts!!!')
         start = time.time()
+
+
+        MAX_PSNR = 0
+        PREV_EPOCH = 0
         for step in range(max_iter):
             fetches = {
                 "train": Net.train,
@@ -381,9 +387,25 @@ elif FLAGS.mode == 'train':
                     print("content_loss", results["content_loss"])
                     print("learning_rate", results['learning_rate'])
 
+            #print(sess.run(psnr))
+
+            CUR_EPOCH = math.ceil(results["global_step"] / data.steps_per_epoch)
+            CUR_EPOCH = int(CUR_EPOCH)
+            if CUR_EPOCH > PREV_EPOCH:
+                PREV_EPOCH = CUR_EPOCH
+                CUR_PSNR = sess.run(psnr)
+                CUR_PSNR = round(CUR_PSNR, 2)
+                if CUR_PSNR > MAX_PSNR:
+                    MAX_PSNR = CUR_PSNR
+                    print('\n\n###MAX_PSNR: {0}, Epoch: {1} - Save the checkpoint###\n\n'.format(MAX_PSNR,CUR_EPOCH))
+
+                    checkpoint_save_path = os.path.join(FLAGS.output_dir, 'model-E{0}-P{1}'.format(CUR_EPOCH, CUR_PSNR))
+                    saver.save(sess, checkpoint_save_path, global_step=sv.global_step)
+
             if ((step +1) % FLAGS.save_freq) == 0:
                 print('Save the checkpoint')
-                saver.save(sess, os.path.join(FLAGS.output_dir, 'model'), global_step=sv.global_step)
+                checkpoint_save_path = os.path.join(FLAGS.output_dir, 'model-E{0}-P{1}'.format(CUR_EPOCH, CUR_PSNR))
+                saver.save(sess, checkpoint_save_path, global_step=sv.global_step)
 
         print('Optimization done!!!!!!!!!!!!')
 
