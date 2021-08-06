@@ -68,6 +68,9 @@ def prelu_tf(inputs, name='Prelu'):
 
 # Define our Lrelu
 def lrelu(inputs, alpha):
+    import keras
+    from keras.layers import LeakyReLU
+
     return keras.layers.LeakyReLU(alpha=alpha).call(inputs)
 
 
@@ -124,7 +127,7 @@ def random_flip(input, decision):
 # The operation used to print out the configuration
 def print_configuration_op(FLAGS):
     print('[Configurations]:')
-    a = FLAGS.mode
+
     #pdb.set_trace()
     for name, value in FLAGS.__flags.items():
         if type(value) == float:
